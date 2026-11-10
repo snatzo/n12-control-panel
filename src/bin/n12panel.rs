@@ -104,14 +104,10 @@ impl Panel {
     }
 }
 
-impl eframe::App for Panel {
-    // eframe 0.37 hands the app a `Ui` directly (there is no separate `update`).
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.poll();
-        if self.busy {
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
-        }
-
+impl Panel {
+    /// The window's contents. Kept as its own method so the `Frame` wrapper in
+    /// `ui()` can call it without tangling borrows.
+    fn draw(&mut self, ui: &mut egui::Ui) {
         ui.heading("Yamaha n12");
         ui.add_space(4.0);
 
@@ -170,6 +166,21 @@ impl eframe::App for Panel {
                 .small()
                 .weak(),
         );
+    }
+}
+
+impl eframe::App for Panel {
+    // eframe 0.37 hands the app a `Ui` directly (there is no separate `update`).
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.poll();
+        if self.busy {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+        }
+
+        // A margin keeps the content off the window edges.
+        egui::Frame::new()
+            .inner_margin(egui::Margin::same(16))
+            .show(ui, |ui| self.draw(ui));
     }
 }
 
