@@ -73,6 +73,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleDisplayName</key><string>n12 Control Panel</string>
   <key>CFBundleIdentifier</key><string>com.n12monterey.panel</string>
   <key>CFBundleExecutable</key><string>n12panel</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>0.1.0</string>
@@ -83,6 +84,25 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 echo "installed the app:  $APP"
+
+# --- icon -------------------------------------------------------------------
+# If a source PNG is present (assets/icon_1024.png), turn it into a .icns and
+# drop it into the bundle. `sips` resizes and `iconutil` packs the iconset.
+ICON_SRC="$REPO/assets/icon_1024.png"
+if [ -f "$ICON_SRC" ]; then
+    WORK="$(mktemp -d)"
+    ICONSET="$WORK/AppIcon.iconset"
+    mkdir -p "$ICONSET" "$APP/Contents/Resources"
+    for s in 16 32 128 256 512; do
+        sips -z "$s" "$s" "$ICON_SRC" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1
+        d=$((s * 2))
+        sips -z "$d" "$d" "$ICON_SRC" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null 2>&1
+    done
+    if iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null; then
+        echo "installed the icon:  $APP/Contents/Resources/AppIcon.icns"
+    fi
+    rm -rf "$WORK"
+fi
 
 # --- the command-line tool --------------------------------------------------
 BIN_DIR="/usr/local/bin"
