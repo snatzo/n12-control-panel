@@ -1,6 +1,6 @@
 # n12ctl — a control panel for the Yamaha n-series on macOS
 
-A small, dependency-free Rust tool to read and (soon) change the settings of a
+A small, dependency-free Rust tool to read and change the settings of a
 **Yamaha n-series mixer (n12/n8)** on a modern Mac — sample rate, clock source,
 master clock, sync status.
 
