@@ -29,7 +29,10 @@ Yamaha n-series driver
 driver only applies a rate when the device starts, so a change restarts the
 device; that is what `n12ctl rate` orchestrates.
 
-**Milestone 3 (planned): the panel itself** — a menu-bar item or small window.
+**Milestone 3 (done): the panel.** `n12panel` is a small window (eframe/egui)
+that shows the current rate and lets you pick a new one; it runs the restart on a
+background thread so the window stays responsive. Start it with
+`cargo run --release --bin n12panel`.
 
 ## Requirements
 
@@ -53,6 +56,12 @@ n12ctl rates           print the advertised sample rates
 n12ctl rate 48000      change the sample rate (restarts the device)
 n12ctl defaults        offer the driver's default four rates
 n12ctl set-rates 44100 48000 88200 96000
+```
+
+The graphical panel:
+
+```sh
+cargo run --release --bin n12panel     # or ./target/release/n12panel
 ```
 
 ## How it works

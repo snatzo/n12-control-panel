@@ -5,11 +5,20 @@ edition = "2021"
 description = "Control panel for the Yamaha n-series (n12/n8) FireWire mixer on modern macOS"
 license = "Apache-2.0"
 
-# No external crates: the tools talk to Apple's IOKit and CoreFoundation
-# frameworks directly through FFI, exactly like the C tools in n12-monterey.
-# Keeping the dependency list empty also means `cargo build` works offline.
 [dependencies]
+# Only the GUI panel needs an external crate. The command-line tool talks to
+# Apple's IOKit/CoreAudio frameworks directly through FFI and pulls nothing in.
+# (`cargo build` needs the network once, to fetch eframe's tree.)
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts"] }
+
+[lib]
+name = "n12ctl"
+path = "src/lib.rs"
 
 [[bin]]
 name = "n12ctl"
-path = "src/main.rs"
+path = "src/bin/n12ctl.rs"
+
+[[bin]]
+name = "n12panel"
+path = "src/bin/n12panel.rs"
