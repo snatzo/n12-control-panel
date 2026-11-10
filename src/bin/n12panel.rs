@@ -1,9 +1,9 @@
 //! n12panel - the graphical control panel for the Yamaha n-series.
 //!
-//! A small window that shows the current sample rate and lets you change it.
-//! Changing the rate is a device restart (the driver only applies a rate at
-//! start), so the work runs on a background thread and the window stays
-//! responsive while `n12_on.sh --rate=HZ` does its thing.
+//! A small window that shows the current sample rate and the desk's MIDI state,
+//! and lets you change the rate. Changing the rate is a device restart (the
+//! driver only applies a rate at start), so the work runs on a background thread
+//! and the window stays responsive while `n12_on.sh --rate=HZ` does its thing.
 //!
 //! Run:  cargo run --release --bin n12panel
 
@@ -12,7 +12,8 @@ use std::thread;
 
 use eframe::egui;
 
-use n12ctl::{coreaudio, host};
+use n12ctl::n12::Device;
+use n12ctl::{coreaudio, coremidi, host};
 
 /// The window's state.
 struct Panel {
@@ -30,6 +31,11 @@ struct Panel {
     busy: bool,
     /// Where the background thread parks its result.
     result: Arc<Mutex<Option<Result<(), String>>>>,
+
+    /// MIDI: the driver's device count and the CoreMIDI port names.
+    midi_devices: Option<u32>,
+    midi_sources: Vec<String>,
+    midi_destinations: Vec<String>,
 }
 
 impl Panel {
@@ -42,35 +48,42 @@ impl Panel {
             status: String::new(),
             busy: false,
             result: Arc::new(Mutex::new(None)),
+            midi_devices: None,
+            midi_sources: Vec::new(),
+            midi_destinations: Vec::new(),
         };
         panel.refresh();
         panel
     }
 
-    /// Re-read the device and its rates from CoreAudio.
+    /// Re-read the device, its rates, and the MIDI state.
     fn refresh(&mut self) {
+        // --- audio ---
         self.device = coreaudio::device_named("n12");
-        let Some(id) = self.device else {
+        if let Some(id) = self.device {
+            self.current = coreaudio::nominal_rate(id);
+            // CoreAudio reports rates as ranges; here they are single values, so
+            // take the minimum, dedupe and sort.
+            let mut rates: Vec<u32> = coreaudio::available_rates(id).iter().map(|r| r.min as u32).collect();
+            rates.sort_unstable();
+            rates.dedup();
+            self.rates = rates;
+            if let Some(cur) = self.current {
+                self.selected = cur as u32;
+            } else if let Some(&first) = self.rates.first() {
+                self.selected = first;
+            }
+        } else {
             self.current = None;
             self.rates.clear();
-            return;
-        };
-
-        self.current = coreaudio::nominal_rate(id);
-
-        // CoreAudio reports rates as ranges; here they are all single values, so
-        // take the minimum, dedupe and sort.
-        let mut rates: Vec<u32> = coreaudio::available_rates(id).iter().map(|r| r.min as u32).collect();
-        rates.sort_unstable();
-        rates.dedup();
-        self.rates = rates;
-
-        // Default the selection to the current rate, or the first offered one.
-        if let Some(cur) = self.current {
-            self.selected = cur as u32;
-        } else if let Some(&first) = self.rates.first() {
-            self.selected = first;
         }
+
+        // --- MIDI ---
+        // The driver's own MIDI device count (opening a fresh user client each
+        // refresh is cheap); then what CoreMIDI has published.
+        self.midi_devices = Device::open().and_then(|d| d.num_midi_devices());
+        self.midi_sources = coremidi::desk_sources();
+        self.midi_destinations = coremidi::desk_destinations();
     }
 
     /// Kick off a rate change on a background thread.
@@ -85,9 +98,17 @@ impl Panel {
         let slot = Arc::clone(&self.result);
         thread::spawn(move || {
             let outcome = host::rate_restart(hz);
-            // Store the result for the UI thread to pick up next frame.
             *slot.lock().unwrap() = Some(outcome);
         });
+    }
+
+    /// Restart MIDIServer so CoreMIDI re-reads the desk's ports. Quick enough to
+    /// do on the UI thread, and it makes the MIDI row update immediately after.
+    fn midi_reinit(&mut self) {
+        let _ = std::process::Command::new("/usr/bin/killall")
+            .arg("MIDIServer")
+            .status();
+        self.status = "restarted MIDIServer".to_string();
     }
 
     /// Pick up a finished background job, if there is one.
@@ -115,7 +136,9 @@ impl Panel {
         // not borrowed mutably twice at once.
         let mut do_apply = false;
         let mut do_refresh = false;
+        let mut do_midi_reinit = false;
 
+        // --- audio ---
         match self.device {
             None => {
                 ui.colored_label(
@@ -148,10 +171,51 @@ impl Panel {
             }
         }
 
+        // --- MIDI ---
+        ui.separator();
+        ui.label("MIDI:");
+
+        let have_ports = !self.midi_sources.is_empty() || !self.midi_destinations.is_empty();
+        if have_ports {
+            // The desk usually shows one in and one out, both named alike.
+            let names: Vec<String> = self
+                .midi_sources
+                .iter()
+                .chain(self.midi_destinations.iter())
+                .cloned()
+                .collect();
+            let mut unique = names;
+            unique.sort();
+            unique.dedup();
+            ui.label(format!("ports: {}", unique.join(", ")));
+        } else {
+            ui.colored_label(
+                egui::Color32::from_rgb(0xb0, 0x40, 0x00),
+                "no ports (is n12_agent running with MIDI?)",
+            );
+        }
+        match self.midi_devices {
+            Some(n) => ui.label(format!("driver MIDI devices: {}", n)),
+            None => ui.label("driver MIDI devices: (unavailable)"),
+        };
+        if ui
+            .add_enabled(!self.busy, egui::Button::new("Re-read MIDI"))
+            .clicked()
+        {
+            do_midi_reinit = true;
+        }
+
+        // --- act on the flags, outside any closure that borrows `self` ---
         if do_apply {
             self.apply();
         }
         if do_refresh {
+            self.refresh();
+        }
+        if do_midi_reinit {
+            self.midi_reinit();
+            // Give MIDIServer a moment, then re-read the port list.
+            std::thread::sleep(std::time::Duration::from_millis(400));
             self.refresh();
         }
 
@@ -186,7 +250,7 @@ impl eframe::App for Panel {
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([380.0, 320.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 460.0]),
         ..Default::default()
     };
     eframe::run_native(
