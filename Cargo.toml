@@ -1,0 +1,15 @@
+[package]
+name = "n12ctl"
+version = "0.1.0"
+edition = "2021"
+description = "Control panel for the Yamaha n-series (n12/n8) FireWire mixer on modern macOS"
+license = "Apache-2.0"
+
+# No external crates: the tools talk to Apple's IOKit and CoreFoundation
+# frameworks directly through FFI, exactly like the C tools in n12-monterey.
+# Keeping the dependency list empty also means `cargo build` works offline.
+[dependencies]
+
+[[bin]]
+name = "n12ctl"
+path = "src/main.rs"
