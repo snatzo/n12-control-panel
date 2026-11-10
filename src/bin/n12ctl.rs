@@ -11,7 +11,7 @@
 
 use n12ctl::host::rate_restart;
 use n12ctl::n12::{fmt_kr, Device, DEFAULT_RATES};
-use n12ctl::{coreaudio, iokit};
+use n12ctl::{coreaudio, coremidi, iokit};
 
 fn print_info(dev: &Device) {
     println!("Yamaha n-series driver");
@@ -70,6 +70,42 @@ fn print_info(dev: &Device) {
     }
 }
 
+/// Show the desk's MIDI state: the driver's own devices/ports, and what CoreMIDI
+/// has published.
+fn print_midi(dev: &Device) {
+    println!("Yamaha n-series MIDI");
+
+    match dev.num_midi_devices() {
+        Some(n) => println!("  driver MIDI devices        : {}", n),
+        None => println!("  driver MIDI devices        : (query failed)"),
+    }
+
+    let src = coremidi::desk_sources();
+    let dst = coremidi::desk_destinations();
+    let list = |v: &Vec<String>| {
+        if v.is_empty() { "(none)".to_string() } else { v.join(", ") }
+    };
+    println!("  CoreMIDI desk sources      : {}", list(&src));
+    println!("  CoreMIDI desk destinations : {}", list(&dst));
+
+    if src.is_empty() && dst.is_empty() {
+        println!();
+        println!("  The desk's ports are missing. CoreMIDI's driver plugin builds its");
+        println!("  list when it loads, so give it a rescan:   n12ctl midi reinit");
+    }
+}
+
+/// Restart MIDIServer so CoreMIDI reloads the Yamaha MIDI plugin and re-publishes
+/// the desk's ports. It relaunches on demand.
+fn midi_reinit() {
+    println!("restarting MIDIServer so CoreMIDI re-reads the desk's ports ...");
+    match std::process::Command::new("/usr/bin/killall").arg("MIDIServer").status() {
+        Ok(s) if s.success() => println!("done - the n12's MIDI ports should now be present"),
+        Ok(s) => eprintln!("killall MIDIServer exited with {}", s),
+        Err(e) => eprintln!("could not run killall: {}", e),
+    }
+}
+
 fn print_rates(dev: &Device) {
     match dev.available_rates() {
         Some(rates) if rates.is_empty() => {
@@ -117,6 +153,10 @@ fn main() {
     match args.first().map(|s| s.as_str()).unwrap_or("info") {
         "info" => print_info(&dev),
         "rates" => print_rates(&dev),
+        "midi" => match args.get(1).map(|s| s.as_str()) {
+            Some("reinit") => midi_reinit(),
+            _ => print_midi(&dev),
+        },
         "defaults" => set_rates(&dev, &DEFAULT_RATES),
         "rate" => match args.get(1).and_then(|s| s.parse::<u32>().ok()) {
             Some(hz) => {
@@ -136,11 +176,13 @@ fn main() {
             set_rates(&dev, &rates);
         }
         "-h" | "--help" | "help" => {
-            println!("usage: n12ctl [info | rates | rate HZ | defaults | set-rates RATE...]");
+            println!("usage: n12ctl [info | rates | rate HZ | midi [reinit] | defaults | set-rates RATE...]");
             println!();
             println!("  info              print the driver's state (default)");
             println!("  rates             print the advertised sample rates");
             println!("  rate HZ           change the sample rate (restarts the device)");
+            println!("  midi              show the desk's MIDI devices and CoreMIDI ports");
+            println!("  midi reinit       restart MIDIServer so CoreMIDI re-reads the ports");
             println!("  defaults          offer the driver's default four rates");
             println!("  set-rates R...    offer a specific list, e.g. 44100 48000");
         }

@@ -8,6 +8,7 @@
 //! * [`host`]      - running n12-monterey's `n12_on.sh` to (re)start the device
 
 pub mod coreaudio;
+pub mod coremidi;
 pub mod host;
 pub mod iokit;
 pub mod n12;

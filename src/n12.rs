@@ -25,6 +25,16 @@ pub const SEL_GET_SAMPLE_RATE: u32 = 77;
 pub const SEL_GET_MASTER_CLOCK: u32 = 78;
 pub const SEL_GET_CLOCK_SOURCE: u32 = 79;
 pub const SEL_GET_AVAILABLE_RATES: u32 = 82;
+// MIDI
+#[allow(dead_code)]
+pub const SEL_CREATE_MIDI_DEVICE: u32 = 18;
+#[allow(dead_code)]
+pub const SEL_START_MIDI_DEVICE: u32 = 25;
+#[allow(dead_code)]
+pub const SEL_CREATE_MIDI_PLUG: u32 = 27;
+pub const SEL_GET_NUM_MIDI_DEVICES: u32 = 20;
+pub const SEL_GET_NUM_MIDI_PLUGS: u32 = 29;
+pub const SEL_SET_MIDI_MODEL_ID: u32 = 67;
 
 /// The driver's own default rate list (`s_availableSampleRatesDefault`).
 pub const DEFAULT_RATES: [u32; 4] = [44100, 48000, 88200, 96000];
@@ -145,6 +155,27 @@ impl Device {
     /// How many audio devices the driver has (`sGetNumAudioDevices`).
     pub fn num_audio_devices(&self) -> Option<u32> {
         let (kr, out) = self.client.call_scalar(SEL_GET_NUM_AUDIO_DEV, &[], 1);
+        if kr == KERN_SUCCESS {
+            out.first().map(|v| *v as u32)
+        } else {
+            None
+        }
+    }
+
+    /// How many MIDI devices the driver has (`sGetNumMIDIDevices`).
+    pub fn num_midi_devices(&self) -> Option<u32> {
+        let (kr, out) = self.client.call_scalar(SEL_GET_NUM_MIDI_DEVICES, &[], 1);
+        if kr == KERN_SUCCESS {
+            out.first().map(|v| *v as u32)
+        } else {
+            None
+        }
+    }
+
+    /// How many MIDI ports (plugs) device `index` has in one direction.
+    pub fn num_midi_plugs(&self, index: u32, is_input: bool) -> Option<u32> {
+        let args = [index as u64, if is_input { 1 } else { 0 }];
+        let (kr, out) = self.client.call_scalar(SEL_GET_NUM_MIDI_PLUGS, &args, 1);
         if kr == KERN_SUCCESS {
             out.first().map(|v| *v as u32)
         } else {

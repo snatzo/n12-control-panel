@@ -34,6 +34,11 @@ that shows the current rate and lets you pick a new one; it runs the restart on 
 background thread so the window stays responsive. Start it with
 `cargo run --release --bin n12panel`.
 
+**Also: MIDI.** `n12ctl midi` reports the desk's MIDI devices and the CoreMIDI
+ports that the Yamaha MIDI plugin publishes (`n12 mLAN Network 1` as a source and
+a destination). The ports themselves are created by `n12-monterey`'s `n12_agent`;
+`n12ctl midi reinit` restarts MIDIServer if CoreMIDI needs to re-read them.
+
 ## Requirements
 
 * macOS with the **Yamaha Steinberg FW Driver** installed **and its kexts
@@ -54,6 +59,8 @@ cargo build --release
 n12ctl                 print the driver's state (same as `info`)
 n12ctl rates           print the advertised sample rates
 n12ctl rate 48000      change the sample rate (restarts the device)
+n12ctl midi            show the desk's MIDI devices and CoreMIDI ports
+n12ctl midi reinit     restart MIDIServer so CoreMIDI re-reads the ports
 n12ctl defaults        offer the driver's default four rates
 n12ctl set-rates 44100 48000 88200 96000
 ```
