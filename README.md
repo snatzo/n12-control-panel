@@ -23,7 +23,7 @@ Yamaha n-series driver
   FireWire speed             : 3 (S300)
 ```
 
-**Milestone 2 (in progress): make the sample rate changeable.** `n12ctl
+**Milestone 2 (partly done): the device now advertises all four rates** (44.1/48/88.2/96 kHz) once the agent sends device type 1 - see [docs/FINDINGS.md](docs/FINDINGS.md). What is left is making the driver *switch* rate on request.
 set-rates …` already updates the driver's rate list (verified by reading it
 back), but CoreAudio does not yet *advertise* the extra rates — see
 [docs/FINDINGS.md](docs/FINDINGS.md) for why and what is left.

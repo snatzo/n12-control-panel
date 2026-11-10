@@ -55,25 +55,46 @@ FireWire speed         : 3 (S300)
 * the **advertisement** does not, because the streams were built with the
   single-rate branch.
 
-## The open question
+## Solved: the device "type" is a field in `sCreateAudioDevice`
 
-The device type (`device+0xfc`) is set by `YamahaFWAudioDevice::setType`, and we
-found **no caller** for it in the driver — so in our build path it appears to
-stay 0, which forces the single-rate branch.
+The 48-byte `sCreateAudioDevice` structure's field at **`+0x0c`** is not an index —
+it is the **device type**, and `createAudioDeviceFunction` feeds it straight to
+`YamahaFWAudioDevice::setType` (which writes `device+0xfc`). Mapping the other
+fields through the same code path gives the whole structure:
 
-The vendor connection manager almost certainly set it (it made calls our agent
-does not, e.g. `sRequestSetDevices`). Finding that call — or a way to trigger the
-stream rebuild — is the remaining task before a sample-rate panel can work.
+| struct field | device setter |
+|---|---|
+| `+0x00` guid | `setGUID` |
+| `+0x08` field08 | `setVendorID` |
+| **`+0x0c` type** | **`setType`** |
+| `+0x10` name | `setDeviceNameStr` |
+| `+0x20` vendor | `setVendorNameStr` |
 
-### Candidate next steps
+We had been sending type **0**. With **1**, the engine's type check passes and
+the multi-rate branch in `createNewAudioStream` runs. Measured on the live device
+(`n12-monterey`'s agent, `--dev-type=N`):
 
-1. Compare against the Mojave user-client capture: does the vendor manager call
-   anything that ends in `setType`?
-2. Try driving the rate through CoreAudio (`kAudioDevicePropertyNominalSampleRate`)
-   and see whether it reaches `performFormatChange` / triggers a rebuild.
-3. Check whether stopping and restarting the device (startChange/finishChange)
-   after setting the list rebuilds the streams with all four rates — i.e. whether
-   ordering alone is enough, without touching the type.
+```
+--dev-type=0 :  available: 44100..44100
+--dev-type=1 :  available: 44100..44100 48000..48000 88200..88200 96000..96000
+```
+
+`n12-monterey`'s agent now defaults to type 1, so CoreAudio advertises all four
+rates.
+
+## Still open: actually switching the rate
+
+Setting CoreAudio's `kAudioDevicePropertyNominalSampleRate` returns success but
+the rate stays put:
+
+```
+set 48000 Hz -> status 0 ; now 44100 Hz
+```
+
+So the property alone is not enough — the driver's own rate-change path has to be
+driven (its `performFormatChange` only acts inside a change cycle, and the desk's
+own clock/rate is involved). That, and making the desk follow, is the next task.
+
 
 `n12ctl` is already the instrument for (2) and (3): it can set the list, and the
 device's CoreAudio properties can be set from a tiny helper or Audio MIDI Setup.
